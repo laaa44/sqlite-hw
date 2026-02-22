@@ -1,114 +1,114 @@
 import sqlite3
 
+conn = sqlite3.connect('students.db')
+conn.execute("PRAGMA foreign_keys = ON;")
+cursor = conn.cursor()
 
-db = sqlite3.connect("students.db")
-cursor = db.cursor()
+
+def print_table(cursor, table_name):
+    cursor.execute(f"SELECT * FROM {table_name}")
+    rows = cursor.fetchall()
+    columns = [desc[0] for desc in cursor.description]
+
+    print(f"\nTable: {table_name}")
+    print(" | ".join(columns))
+    print("-" * 30)
+    for row in rows:
+        print(" | ".join(str(value) for value in row))
+
+
 
 
 cursor.execute("""
-CREATE TABLE IF NOT EXISTS student (
-    studentID INTEGER PRIMARY KEY,
-    name TEXT,
-    age INTEGER
+CREATE TABLE IF NOT EXISTS students (
+    student_id INT PRIMARY KEY,
+    name TEXT NOT NULL,
+    age INT
 )
 """)
+
+students = [
+    (1, 'Alice', 20),
+    (2, 'Bob', 22),
+    (3, 'Charlie', 21)
+]
+cursor.executemany("INSERT INTO students VALUES (?, ?, ?)", students)
+conn.commit()
+print_table(cursor, "students")
+
+
 
 cursor.execute("""
-CREATE TABLE IF NOT EXISTS course (
-    courseID INTEGER PRIMARY KEY,
-    courseName TEXT
+CREATE TABLE IF NOT EXISTS registered_Courses (
+    student_id INT,
+    course_id INT NOT NULL,
+    PRIMARY KEY(student_id, course_id),
+    FOREIGN KEY(student_id) REFERENCES students(student_id)
 )
 """)
+
+registrations = [
+    (1, 101),
+    (1, 102),
+    (2, 101),
+    (2, 103),
+    (3, 102),
+    (3, 103)
+]
+cursor.executemany("INSERT INTO registered_Courses VALUES (?, ?)", registrations)
+conn.commit()
+print_table(cursor, "registered_Courses")
+
+
+
 
 cursor.execute("""
-CREATE TABLE IF NOT EXISTS registered_courses (
-    studentID INTEGER,
-    courseID INTEGER,
-    FOREIGN KEY(studentID) REFERENCES student(studentID),
-    FOREIGN KEY(courseID) REFERENCES course(courseID)
+CREATE TABLE IF NOT EXISTS Grades (
+    student_id INT,
+    course_id INT,
+    received_grade REAL,
+    PRIMARY KEY(student_id, course_id),
+    FOREIGN KEY(student_id, course_id) REFERENCES registered_Courses(student_id, course_id)
 )
 """)
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS grades (
-    studentID INTEGER,
-    courseID INTEGER,
-    grade REAL,
-    FOREIGN KEY(studentID) REFERENCES student(studentID),
-    FOREIGN KEY(courseID) REFERENCES course(courseID)
-)
-""")
+grades = [
+    (1, 101, 85.0),
+    (1, 102, 90.0),
+    (2, 101, 75.0),
+    (2, 103, 80.0),
+    (3, 102, 92.0),
+    (3, 103, 95.0)
+]
+cursor.executemany("INSERT INTO Grades VALUES (?, ?, ?)", grades)
+conn.commit()
+print_table(cursor, "Grades")
 
-
-cursor.execute("DELETE FROM student")
-cursor.execute("DELETE FROM course")
-cursor.execute("DELETE FROM registered_courses")
-cursor.execute("DELETE FROM grades")
-
-
-cursor.execute("INSERT INTO student VALUES (1, 'Aya', 20)")
-cursor.execute("INSERT INTO student VALUES (2, 'Dany', 21)")
-
-# Courses
-cursor.execute("INSERT INTO course VALUES (101, 'Database Systems')")
-cursor.execute("INSERT INTO course VALUES (102, 'Computer Networks')")
-cursor.execute("INSERT INTO course VALUES (103, 'Electronics I')")
-
-
-cursor.execute("INSERT INTO registered_courses VALUES (1, 101)")
-cursor.execute("INSERT INTO registered_courses VALUES (1, 102)")
-cursor.execute("INSERT INTO registered_courses VALUES (2, 101)")
-cursor.execute("INSERT INTO registered_courses VALUES (2, 103)")
-
-
-cursor.execute("INSERT INTO grades VALUES (1, 101, 85.5)")
-cursor.execute("INSERT INTO grades VALUES (1, 102, 90.0)")
-cursor.execute("INSERT INTO grades VALUES (2, 101, 78.0)")
-cursor.execute("INSERT INTO grades VALUES (2, 103, 82.0)")
-
-db.commit()
-
-
-
-
-print("Maximum grade per student:")
-cursor.execute("""
-SELECT s.studentID, s.name, c.courseName, g.grade
-FROM grades g
-JOIN student s ON g.studentID = s.studentID
-JOIN course c ON g.courseID = c.courseID
-WHERE g.grade = (
-    SELECT MAX(grade)
-    FROM grades
-    WHERE studentID = g.studentID
-)
-""")
-for row in cursor.fetchall():
-    print(f"Student {row[1]} (ID {row[0]}) : Max Grade {row[3]} in {row[2]}")
 
 
 print("\nAverage grade per student:")
 cursor.execute("""
-SELECT s.studentID, s.name, AVG(g.grade)
-FROM grades g
-JOIN student s ON g.studentID = s.studentID
-GROUP BY s.studentID
+SELECT student_id, AVG(received_grade)
+FROM Grades
+GROUP BY student_id
 """)
 for row in cursor.fetchall():
-    print(f"Student {row[1]} (ID {row[0]}) : Average Grade {row[2]:.2f}")
+    print(f"Student ID: {row[0]}, Average Grade: {row[1]:.2f}")
 
 
-print("\nAll students with their registered courses and grades:")
+
+print("\nMaximum grade per student:")
 cursor.execute("""
-SELECT s.name, c.courseName, g.grade
-FROM registered_courses rc
-JOIN student s ON rc.studentID = s.studentID
-JOIN course c ON rc.courseID = c.courseID
-LEFT JOIN grades g ON rc.studentID = g.studentID AND rc.courseID = g.courseID
-ORDER BY s.name, c.courseName
+SELECT g.student_id, g.course_id, g.received_grade AS max_grade
+FROM Grades g
+JOIN (
+    SELECT student_id, MAX(received_grade) AS max_grade
+    FROM Grades
+    GROUP BY student_id
+) mg
+ON g.student_id = mg.student_id AND g.received_grade = mg.max_grade
 """)
 for row in cursor.fetchall():
-    print(f"{row[0]} : {row[1]} : {row[2]}")
+    print(f"Student ID: {row[0]}, Course ID: {row[1]}, Max Grade: {row[2]}")
 
-
-db.close()
+conn.close()
